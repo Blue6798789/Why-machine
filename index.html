@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Why Machine — Moteur Causal Groq IA</title>
+  <style>
+    :root {
+      --bg-main: #0b0f19;
+      --bg-panel: rgba(18, 24, 38, 0.95);
+      --bg-node: #161f33;
+      --border-color: #2a364f;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      
+      --fact-color: #10b981;
+      --fact-bg: rgba(16, 185, 129, 0.15);
+      --hypo-color: #f59e0b;
+      --hypo-bg: rgba(245, 158, 11, 0.15);
+      --open-color: #a855f7;
+      --open-bg: rgba(168, 85, 247, 0.15);
+      --fun-color: #ec4899;
+      --fun-bg: rgba(236, 72, 153, 0.15);
+      --accent-color: #3b82f6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      height: 65px;
+      padding: 0 24px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 10;
+    }
+
+    .brand-title {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      background: linear-gradient(135deg, #60a5fa, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      white-space: nowrap;
+    }
+
+    .search-bar {
+      flex: 1;
+      max-width: 650px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .search-input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+
+    .btn {
+      background: #1e293b;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover { background: #334155; }
+    .btn-primary { background: var(--accent-color); border-color: var(--accent-color); }
+    .btn-primary:hover { background: #2563eb; }
+
+    main {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #viewport {
+      flex: 1;
+      height: 100%;
+      cursor: grab;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #viewport:active { cursor: grabbing; }
+
+    #canvas-container {
+      position: absolute;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    svg#connectors {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 15000px;
+      height: 15000px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .connector-line {
+      fill: none;
+      stroke: #334155;
+      stroke-width: 2px;
+      transition: stroke 0.3s ease;
+    }
+
+    .connector-line.highlighted {
+      stroke: var(--accent-color);
+      stroke-width: 3px;
+    }
+
+    .node-tree {
+      position: absolute;
+      z-index: 2;
+      width: 340px;
+      background: var(--bg-node);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
+      cursor: pointer;
+    }
+
+    .node-tree:hover { border-color: #475569; }
+    .node-tree.selected {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+    }
+
+    .node-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .badge {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 12px;
+    }
+
+    .badge-fact { color: var(--fact-color); background: var(--fact-bg); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-hypothesis { color: var(--hypo-color); background: var(--hypo-bg); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-question { color: var(--open-color); background: var(--open-bg); border: 1px solid rgba(168, 85, 247, 0.3); }
+    .badge-funfact { color: var(--fun-color); background: var(--fun-bg); border: 1px solid rgba(236, 72, 153, 0.3); }
+
+    .node-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.35;
+      margin-bottom: 8px;
+    }
+
+    .node-body-text {
+      font-size: 0.83rem;
+      color: #cbd5e1;
+      line-height: 1.45;
+      margin-bottom: 12px;
+    }
+
+    .node-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+    }
+
+    .expand-btn {
+      background: #1e293b;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .expand-btn:hover { background: var(--accent-color); }
+
+    #side-panel {
+      width: 420px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(16px);
+      border-left: 1px solid var(--border-color);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: absolute;
+      right: 0;
+      top: 0;
+      z-index: 20;
+    }
+
+    #side-panel.open { transform: translateX(0); }
+
+    .panel-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .panel-body {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-label { font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; }
+    .field-input, .field-textarea, .field-select {
+      background: #0f172a;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+    .field-textarea { resize: vertical; min-height: 90px; line-height: 1.45; }
+
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 30;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    #loading-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--border-color);
+      border-top-color: var(--accent-color);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal.open { opacity: 1; pointer-events: all; }
+    .modal-card {
+      background: #161f33;
+      border: 1px solid var(--border-color);
+      padding: 24px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .hud-controls {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 6px;
+      display: flex;
+      gap: 4px;
+      z-index: 10;
+    }
+
+    .hud-btn {
+      width: 32px; height: 32px; background: transparent; border: none; color: var(--text-main);
+      cursor: pointer; font-weight: bold; border-radius: 4px;
+    }
+    .hud-btn:hover { background: rgba(255, 255, 255, 0.1); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand-title">THE WHY MACHINE</div>
+    <form class="search-bar" id="search-form">
+      <input type="text" id="user-question-input" class="search-input" placeholder="Pose ta question (ex : Comment s'appelle notre galaxie ?)..." required>
+      <button type="submit" class="btn btn-primary">Analyser par Groq</button>
+    </form>
+    <button class="btn" id="btn-open-key-modal">⚡ Configurer Clé Groq</button>
+    <button class="btn" id="btn-reset-view">Recentrer</button>
+  </header>
+
+  <main>
+    <div id="viewport">
+      <div id="canvas-container">
+        <svg id="connectors"></svg>
+        <div id="nodes-layer"></div>
+      </div>
+    </div>
+
+    <div class="hud-controls">
+      <button class="hud-btn" id="btn-zoom-in">+</button>
+      <button class="hud-btn" id="btn-zoom-out">-</button>
+      <button class="hud-btn" id="btn-zoom-fit">Fit</button>
+    </div>
+
+    <aside id="side-panel">
+      <div class="panel-header">
+        <h3 id="panel-head-title">Fiche de preuve</h3>
+        <button class="btn" id="btn-close-panel">&times;</button>
+      </div>
+      <div class="panel-body">
+        <div class="field-group">
+          <label class="field-label">Intitulé de la cause</label>
+          <input type="text" id="panel-label" class="field-input">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Statut Épistémologique</label>
+          <select id="panel-type" class="field-select">
+            <option value="fact">Fait vérifié (Preuves solides)</option>
+            <option value="hypothesis">Hypothèse (Modèle à confirmer)</option>
+            <option value="question">Question ouverte (Limite de la science)</option>
+            <option value="funfact">💡 Fun Fact (Anecdote surprenante)</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Explication développée</label>
+          <textarea id="panel-explanation" class="field-textarea"></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Preuves scientifiques & Sources</label>
+          <textarea id="panel-evidence" class="field-textarea"></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Questions encore ouvertes</label>
+          <textarea id="panel-open" class="field-textarea"></textarea>
+        </div>
+      </div>
+    </aside>
+
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <p style="font-weight: 600; font-size: 1.1rem;" id="loading-text">Groq analyse en cours...</p>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px;">Génération de l'arbre causal personnalisé...</p>
+    </div>
+
+    <div class="modal" id="key-modal">
+      <div class="modal-card">
+        <h3>Configuration de la Clé API Groq</h3>
+        <div class="field-group">
+          <label class="field-label">Clé API Groq (gsk_...)</label>
+          <input type="password" id="api-key-input" class="field-input" placeholder="Colle ta clé gsk_... ici">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button class="btn" id="btn-close-modal">Fermer</button>
+          <button class="btn btn-primary" id="btn-save-key">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // SÉCURISÉ : Plus aucune clé en dur. Elle est récupérée du stockage local du navigateur de l'utilisateur.
+    const savedKey = localStorage.getItem('why_machine_groq_key') || '';
+    
+    const state = {
+      nodes: {},
+      rootId: 'root',
+      selectedNodeId: null,
+      transform: { x: 80, y: 120, scale: 0.85 },
+      apiKey: savedKey,
+      isDragging: false,
+      dragStart: { x: 0, y: 0 }
+    };
+
+    function buildSystemPrompt() {
+      return "Tu es le moteur The Why Machine. Analyse la question de l'utilisateur et construis un arbre de causalité récursif précis, détaillé et directement lié au sujet. " +
+             "Tu dois impérativement inclure un nœud de type 'funfact' (anecdote surprenante et ludique liée au sujet). " +
+             "Réponds EXCLUSIVEMENT en JSON valide sous la forme d'un dictionnaire avec les clés exactes : root, c1, c2, funfact, etc. " +
+             "Chaque objet du dictionnaire doit contenir : id, parentId, label, type ('fact', 'hypothesis', 'question', 'funfact'), explanation, evidence, openQuestions, expanded (true/false), children (tableau de strings avec les ids des enfants).";
+    }
+
+    function sanitizeAndValidateNodes(rawData, question) {
+      if (!rawData || typeof rawData !== 'object') {
+        throw new Error("Format de données invalide reçu de l'IA.");
+      }
+
+      if (!rawData.root) {
+        const firstKey = Object.keys(rawData)[0];
+        if (firstKey) {
+          rawData.root = rawData[firstKey];
+          rawData.root.id = 'root';
+          rawData.root.parentId = null;
+        } else {
+          throw new Error("Aucun nœud racine trouvé dans la réponse.");
+        }
+      }
+
+      const validatedNodes = {};
+      
+      Object.keys(rawData).forEach(function(id) {
+        const item = rawData[id];
+        if (item && typeof item === 'object') {
+          validatedNodes[id] = {
+            id: id,
+            parentId: item.parentId !== undefined ? item.parentId : (id === 'root' ? null : 'root'),
+            label: item.label || question,
+            type: ['fact', 'hypothesis', 'question', 'funfact'].includes(item.type) ? item.type : 'fact',
+            explanation: item.explanation || "Explication en cours de chargement...",
+            evidence: item.evidence || "Données scientifiques associées.",
+            openQuestions: item.openQuestions || "Aucune question ouverte spécifiée.",
+            expanded: typeof item.expanded === 'boolean' ? item.expanded : true,
+            children: Array.isArray(item.children) ? item.children : []
+          };
+        }
+      });
+
+      Object.keys(validatedNodes).forEach(function(id) {
+        const node = validatedNodes[id];
+        node.children = node.children.filter(function(childId) {
+          if (validatedNodes[childId]) {
+            validatedNodes[childId].parentId = id;
+            return true;
+          }
+          return false;
+        });
+      });
+
+      return validatedNodes;
+    }
+
+    async function fetchCausalTreeFromAI(question) {
+      if (!state.apiKey) {
+        document.getElementById('key-modal').classList.add('open');
+        return;
+      }
+
+      showLoading(true, "Groq analyse : « " + question + " »");
+
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + state.apiKey
+          },
+          body: JSON.stringify({
+            model: 'openai/gpt-oss-120b',
+            messages: [
+              { role: 'system', content: buildSystemPrompt() },
+              { role: 'user', content: "Décompose précisément cette question en arbre causal : \"" + question + "\"" }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.2
+          })
+        });
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          throw new Error("Erreur API Groq (" + response.status + ") : " + errBody);
+        }
+
+        const data = await response.json();
+        
+        if (!data.choices || !data.choices[0].message || !data.choices[0].message.content) {
+          throw new Error("Structure de réponse inattendue reçue de l'API Groq.");
+        }
+
+        let rawText = data.choices[0].message.content.trim();
+
+        if (rawText.indexOf('```') !== -1) {
+          rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        }
+
+        const firstBrace = rawText.indexOf('{');
+        const lastBrace = rawText.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          rawText = rawText.substring(firstBrace, lastBrace + 1);
+        }
+
+        const parsedJson = JSON.parse(rawText);
+        state.nodes = sanitizeAndValidateNodes(parsedJson, question);
+        state.rootId = 'root';
+        state.selectedNodeId = null;
+        state.transform = { x: 80, y: 120, scale: 0.85 };
+        
+        closePanel();
+        render();
+
+      } catch (err) {
+        console.error("Erreur critique attrapée :", err);
+        alert("Erreur lors de l'analyse Groq :\n" + err.message);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    function showLoading(show, text) {
+      const overlay = document.getElementById('loading-overlay');
+      const loadingText = document.getElementById('loading-text');
+      if (text && loadingText) loadingText.innerText = text;
+      if (show) overlay.classList.add('active');
+      else overlay.classList.remove('active');
+    }
+
+    function calculateLayout() {
+      const nodeWidth = 340;
+      const nodeHeight = 200;
+      const gapX = 100;
+      const gapY = 30;
+
+      const positions = {};
+      let currentY = 0;
+
+      function layoutSubtree(nodeId, depth) {
+        const node = state.nodes[nodeId];
+        if (!node) return;
+
+        const x = depth * (nodeWidth + gapX);
+
+        if (node.expanded && node.children && node.children.length > 0) {
+          const startY = currentY;
+          node.children.forEach(function(childId) { layoutSubtree(childId, depth + 1); });
+          const endY = currentY - gapY;
+          const y = startY + (endY - startY) / 2;
+          positions[nodeId] = { x: x, y: y };
+        } else {
+          positions[nodeId] = { x: x, y: currentY };
+          currentY += nodeHeight + gapY;
+        }
+      }
+
+      if (state.nodes[state.rootId]) {
+        layoutSubtree(state.rootId, 0);
+      }
+      return positions;
+    }
+
+    function render() {
+      const positions = calculateLayout();
+      const nodesLayer = document.getElementById('nodes-layer');
+      const connectorsSvg = document.getElementById('connectors');
+
+      nodesLayer.innerHTML = '';
+      connectorsSvg.innerHTML = '';
+
+      Object.keys(state.nodes).forEach(function(id) {
+        const node = state.nodes[id];
+        if (!node.parentId || !positions[id] || !positions[node.parentId]) return;
+
+        const p1 = positions[node.parentId];
+        const p2 = positions[id];
+
+        const x1 = p1.x + 340;
+        const y1 = p1.y + 90;
+        const x2 = p2.x;
+        const y2 = p2.y + 90;
+        const dx = (x2 - x1) / 2;
+
+        const path = document.createElementNS('[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)', 'path');
+        path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' C ' + (x1 + dx) + ' ' + y1 + ', ' + (x2 - dx) + ' ' + y2 + ', ' + x2 + ' ' + y2);
+        path.setAttribute('class', 'connector-line ' + (state.selectedNodeId === id ? 'highlighted' : ''));
+        connectorsSvg.appendChild(path);
+      });
+
+      Object.keys(positions).forEach(function(id) {
+        const node = state.nodes[id];
+        const pos = positions[id];
+
+        const el = document.createElement('div');
+        el.className = 'node-tree ' + (state.selectedNodeId === id ? 'selected' : '');
+        el.style.transform = 'translate(' + pos.x + 'px, ' + pos.y + 'px)';
+
+        let badgeClass = 'badge-fact';
+        let badgeText = 'Fait vérifié';
+        if (node.type === 'hypothesis') {
+          badgeClass = 'badge-hypothesis';
+          badgeText = 'Hypothèse';
+        } else if (node.type === 'question') {
+          badgeClass = 'badge-question';
+          badgeText = 'Question ouverte';
+        } else if (node.type === 'funfact') {
+          badgeClass = 'badge-funfact';
+          badgeText = '💡 Fun Fact';
+        }
+
+        const hasChildren = node.children && node.children.length > 0;
+
+        el.innerHTML = 
+          '<div class="node-header">' +
+            '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
+          '</div>' +
+          '<div class="node-title">' + escapeHTML(node.label) + '</div>' +
+          '<div class="node-body-text">' + escapeHTML(node.explanation) + '</div>' +
+          '<div class="node-footer">' +
+            '<span>' + (node.children ? node.children.length : 0) + ' sous-causes</span>' +
+            (hasChildren ? '<button class="expand-btn" data-toggle="' + id + '">' + (node.expanded ? '−' : '+') + '</button>' : '') +
+          '</div>';
+
+        el.addEventListener('click', function(e) {
+          if (e.target.hasAttribute('data-toggle')) {
+            e.stopPropagation();
+            node.expanded = !node.expanded;
+            render();
+          } else {
+            selectNode(id);
+          }
+        });
+
+        nodesLayer.appendChild(el);
+      });
+
+      updateTransform();
+    }
+
+    function selectNode(id) {
+      state.selectedNodeId = id;
+      const node = state.nodes[id];
+      if (node) {
+        document.getElementById('panel-label').value = node.label || '';
+        document.getElementById('panel-type').value = node.type || 'fact';
+        document.getElementById('panel-explanation').value = node.explanation || '';
+        document.getElementById('panel-evidence').value = node.evidence || '';
+        document.getElementById('panel-open').value = node.openQuestions || '';
+        document.getElementById('side-panel').classList.add('open');
+      }
+      render();
+    }
+
+    function closePanel() {
+      state.selectedNodeId = null;
+      document.getElementById('side-panel').classList.remove('open');
+      render();
+    }
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return str.replace(/[&<>"']/g, function(m) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m];
+      });
+    }
+
+    function setupEvents() {
+      document.getElementById('btn-close-panel').addEventListener('click', closePanel);
+
+      document.getElementById('search-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const q = document.getElementById('user-question-input').value.trim();
+        if (q) fetchCausalTreeFromAI(q);
+      });
+
+      document.getElementById('btn-open-key-modal').addEventListener('click', function() {
+        document.getElementById('api-key-input').value = state.apiKey;
+        document.getElementById('key-modal').classList.add('open');
+      });
+
+      document.getElementById('btn-close-modal').addEventListener('click', function() {
+        document.getElementById('key-modal').classList.remove('open');
+      });
+
+      document.getElementById('btn-save-key').addEventListener('click', function() {
+        state.apiKey = document.getElementById('api-key-input').value.trim();
+        localStorage.setItem('why_machine_groq_key', state.apiKey);
+        document.getElementById('key-modal').classList.remove('open');
+      });
+
+      ['panel-label', 'panel-type', 'panel-explanation', 'panel-evidence', 'panel-open'].forEach(function(fieldId) {
+        document.getElementById(fieldId).addEventListener('input', function() {
+          if (!state.selectedNodeId || !state.nodes[state.selectedNodeId]) return;
+          const node = state.nodes[state.selectedNodeId];
+          node.label = document.getElementById('panel-label').value;
+          node.type = document.getElementById('panel-type').value;
+          node.explanation = document.getElementById('panel-explanation').value;
+          node.evidence = document.getElementById('panel-evidence').value;
+          node.openQuestions = document.getElementById('panel-open').value;
+          render();
+        });
+      });
+
+      const viewport = document.getElementById('viewport');
+      viewport.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.node-tree') || e.target.closest('#side-panel') || e.target.closest('.modal')) return;
+        state.isDragging = true;
+        state.dragStart = { x: e.clientX - state.transform.x, y: e.clientY - state.transform.y };
+      });
+
+      window.addEventListener('mousemove', function(e) {
+        if (!state.isDragging) return;
+        state.transform.x = e.clientX - state.dragStart.x;
+        state.transform.y = e.clientY - state.dragStart.y;
+        updateTransform();
+      });
+
+      window.addEventListener('mouseup', function() { state.isDragging = false; });
+
+      document.getElementById('btn-reset-view').addEventListener('click', function() {
+        state.transform = { x: 80, y: 120, scale: 0.85 };
+        updateTransform();
+      });
+
+      document.getElementById('btn-zoom-in').addEventListener('click', function() {
+        state.transform.scale = Math.min(2, state.transform.scale * 1.15);
+        updateTransform();
+      });
+
+      document.getElementById('btn-zoom-out').addEventListener('click', function() {
+        state.transform.scale = Math.max(0.3, state.transform.scale * 0.85);
+        updateTransform();
+      });
+    }
+
+    function updateTransform() {
+      const container = document.getElementById('canvas-container');
+      container.style.transform = 'translate(' + state.transform.x + 'px, ' + state.transform.y + 'px) scale(' + state.transform.scale + ')';
+    }
+
+    window.addEventListener('DOMContentLoaded', function() {
+      setupEvents();
+      state.nodes = {
+        'root': {
+          id: 'root', parentId: null,
+          label: 'Pourquoi la tour Eiffel grandit-elle en été ?',
+          type: 'fact',
+          explanation: 'Pendant la saison estivale, la hauteur de la tour Eiffel augmente de 15 cm en raison de la dilatation thermique du fer.',
+          evidence: 'Mesures altimétriques de la SETE.',
+          openQuestions: 'Impact du vent fort.',
+          expanded: true, children: ['c1', 'ff1']
+        },
+        'c1': {
+          id: 'c1', parentId: 'root',
+          label: 'Dilatation thermique du fer',
+          type: 'fact',
+          explanation: 'L\'agitation atomique due à la chaleur accroît la distance interatomique.',
+          evidence: 'Coefficient de dilatation linéaire.',
+          openQuestions: 'Effet sous chaleur extrême.',
+          expanded: false, children: []
+        },
+        'ff1': {
+          id: 'ff1', parentId: 'root',
+          label: '💡 Le saviez-vous ?',
+          type: 'funfact',
+          explanation: 'La tour Eiffel rétrécit aussi en hiver ! Le froid contracte le métal, ce qui lui fait perdre jusqu\'à plusieurs centimètres.',
+          evidence: 'Observations thermomécaniques saisonnières.',
+          openQuestions: 'Amplitude maximale selon les hivers.',
+          expanded: false, children: []
+        }
+      };
+      render();
+
+      // Si aucune clé n'est enregistrée dans le navigateur, ouvrir la modale pour la demander
+      if (!state.apiKey) {
+        document.getElementById('key-modal').classList.add('open');
+      }
+    });
+  </script>
+</body>
+</html>
