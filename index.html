@@ -495,7 +495,7 @@
     <div id="loading-overlay">
       <div class="spinner"></div>
       <p style="font-weight: 600; font-size: 1.1rem;" id="loading-text">Construction du schéma...</p>
-      <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px;">Génération de l'arbre causal personnalisé...</p>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px;">Génération de l'arbre causal approfondi...</p>
     </div>
 
     <div class="modal" id="key-modal">
@@ -534,10 +534,16 @@
     };
 
     function buildSystemPrompt() {
-      return "Tu es le moteur The Why Machine. Analyse la question de l'utilisateur et construis un arbre de causalité récursif précis, détaillé et directement lié au sujet. " +
-             "Tu dois impérativement inclure un nœud de type 'funfact' (anecdote surprenante et ludique liée au sujet). " +
-             "Réponds EXCLUSIVEMENT en JSON valide sous la forme d'un dictionnaire avec les clés exactes : root, c1, c2, funfact, etc. " +
-             "Chaque objet du dictionnaire doit contenir : id, parentId, label, type ('fact', 'hypothesis', 'question', 'funfact'), explanation, evidence, openQuestions, expanded (true/false), children (tableau de strings avec les ids des enfants).";
+      return "Tu es 'The Why Machine', un moteur d'analyse causale scientifique, rigoureux et exhaustif. " +
+             "Ton objectif est de décomposer la question de l'utilisateur en un arbre de causalité profond, véridique, multi-niveaux et scientifiquement fondé. " +
+             "Ne t'arrête pas aux évidences de surface : explore les mécanismes fondamentaux, les chaînes de causes à effet successives (causes primaires, secondaires, contextuelles) et les faits avérés. " +
+             "Règles obligatoires pour chaque nœud : " +
+             "1. Inclus impérativement un nœud de type 'funfact' (anecdote scientifique ou historique surprenante et exacte liée au sujet). " +
+             "2. Varie les types de nœuds entre 'fact' (faits avérés et mesurés), 'hypothesis' (hypothèses de recherche ou modèles en cours de validation), 'question' (limites actuelles de la science ou zones d'ombre) et 'funfact'. " +
+             "3. Fournis des explications développées, rigoureuses et des preuves/sources tangibles dans le champ 'evidence'. " +
+             "Format de sortie STRICT : Réponds EXCLUSIVEMENT en un objet JSON valide sous forme de dictionnaire (clés exactes : root, c1, c2, etc.). " +
+             "Chaque objet du dictionnaire doit contenir exactement ces champs : " +
+             "id (string), parentId (string ou null), label (string court et percutant), type ('fact', 'hypothesis', 'question', 'funfact'), explanation (string détaillé), evidence (string avec sources/preuves), openQuestions (string sur les zones d'ombre), expanded (boolean, true pour les nœuds principaux, false pour les feuilles), children (tableau de strings contenant les IDs des enfants).";
     }
 
     function sanitizeAndValidateNodes(rawData, question) {
@@ -632,7 +638,7 @@
         return;
       }
 
-      showLoading(true, "Construction du schéma : « " + question + " »");
+      showLoading(true, "Analyse approfondie : « " + question + " »");
 
       try {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -645,7 +651,7 @@
             model: 'openai/gpt-oss-120b',
             messages: [
               { role: 'system', content: buildSystemPrompt() },
-              { role: 'user', content: "Décompose précisément cette question en arbre causal : \"" + question + "\"" }
+              { role: 'user', content: "Décompose précisément cette question en arbre causal approfondi : \"" + question + "\"" }
             ],
             response_format: { type: "json_object" },
             temperature: 0.2
