@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>The Why Machine — Moteur Causal Groq IA</title>
   <style>
     :root {
@@ -118,6 +118,7 @@
       cursor: grab;
       position: relative;
       overflow: hidden;
+      touch-action: none;
     }
 
     #viewport:active { cursor: grabbing; }
@@ -172,7 +173,7 @@
     .node-drag-handle {
       background: rgba(255, 255, 255, 0.03);
       margin: -16px -16px 12px -16px;
-      padding: 8px 16px;
+      padding: 10px 16px;
       border-radius: 12px 12px 0 0;
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       display: flex;
@@ -301,7 +302,6 @@
     }
     .field-textarea { resize: vertical; min-height: 90px; line-height: 1.45; }
     
-    /* Style pour les champs en lecture seule */
     .field-input[readonly], .field-textarea[readonly] {
       background: #090d16;
       color: #94a3b8;
@@ -390,6 +390,46 @@
       cursor: pointer; font-weight: bold; border-radius: 4px;
     }
     .hud-btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+    /* ADAPTATION MOBILE AUTOMATIQUE (SANS TOUCHER À L'INTERFACE PC) */
+    @media (max-width: 768px) {
+      body {
+        height: 100dvh;
+        min-height: 100dvh;
+      }
+      header {
+        height: auto;
+        padding: 8px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .brand-title {
+        order: 1;
+        font-size: 0.95rem;
+      }
+      #btn-open-key-modal {
+        order: 2;
+        padding: 6px 10px;
+        font-size: 0.75rem;
+      }
+      #btn-reset-view {
+        order: 3;
+        padding: 6px 10px;
+        font-size: 0.75rem;
+      }
+      .search-bar {
+        order: 4;
+        flex: 1 1 100%;
+        max-width: 100%;
+      }
+      #side-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      .node-tree {
+        width: 290px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -488,7 +528,9 @@
       isDraggingViewport: false,
       draggingNodeId: null,
       dragStart: { x: 0, y: 0 },
-      nodeDragOffset: { x: 0, y: 0 }
+      nodeDragOffset: { x: 0, y: 0 },
+      initialPinchDist: null,
+      initialScale: 0.85
     };
 
     function buildSystemPrompt() {
@@ -546,7 +588,42 @@
         });
       });
 
+      assignInitialLayout(validatedNodes, 'root');
       return validatedNodes;
+    }
+
+    function assignInitialLayout(nodesObj, rootId) {
+      const nodeWidth = 340;
+      const nodeHeight = 200;
+      const gapX = 100;
+      const gapY = 30;
+      let currentY = 0;
+
+      function layoutSubtree(nodeId, depth) {
+        const node = nodesObj[nodeId];
+        if (!node) return;
+
+        const autoX = depth * (nodeWidth + gapX);
+
+        if (node.expanded && node.children && node.children.length > 0) {
+          const startY = currentY;
+          node.children.forEach(function(childId) { layoutSubtree(childId, depth + 1); });
+          const endY = currentY - gapY;
+          const autoY = startY + (endY - startY) / 2;
+          
+          if (node.customX === undefined) node.customX = autoX;
+          if (node.customY === undefined) node.customY = autoY;
+        } else {
+          const autoY = currentY;
+          currentY += nodeHeight + gapY;
+          if (node.customX === undefined) node.customX = autoX;
+          if (node.customY === undefined) node.customY = autoY;
+        }
+      }
+
+      if (nodesObj[rootId]) {
+        layoutSubtree(rootId, 0);
+      }
     }
 
     async function fetchCausalTreeFromAI(question) {
@@ -624,43 +701,14 @@
     }
 
     function calculateLayout() {
-      const nodeWidth = 340;
-      const nodeHeight = 200;
-      const gapX = 100;
-      const gapY = 30;
-
       const positions = {};
-      let currentY = 0;
-
-      function layoutSubtree(nodeId, depth) {
-        const node = state.nodes[nodeId];
-        if (!node) return;
-
-        const autoX = depth * (nodeWidth + gapX);
-
-        if (node.expanded && node.children && node.children.length > 0) {
-          const startY = currentY;
-          node.children.forEach(function(childId) { layoutSubtree(childId, depth + 1); });
-          const endY = currentY - gapY;
-          const autoY = startY + (endY - startY) / 2;
-          
-          positions[nodeId] = {
-            x: node.customX !== undefined ? node.customX : autoX,
-            y: node.customY !== undefined ? node.customY : autoY
-          };
-        } else {
-          const autoY = currentY;
-          currentY += nodeHeight + gapY;
-          positions[nodeId] = {
-            x: node.customX !== undefined ? node.customX : autoX,
-            y: node.customY !== undefined ? node.customY : autoY
-          };
-        }
-      }
-
-      if (state.nodes[state.rootId]) {
-        layoutSubtree(state.rootId, 0);
-      }
+      Object.keys(state.nodes).forEach(function(id) {
+        const node = state.nodes[id];
+        positions[id] = {
+          x: node.customX !== undefined ? node.customX : 0,
+          y: node.customY !== undefined ? node.customY : 0
+        };
+      });
       return positions;
     }
 
@@ -737,15 +785,29 @@
         });
 
         const handle = el.querySelector('.node-drag-handle');
+        
         handle.addEventListener('mousedown', function(e) {
           e.stopPropagation();
           state.draggingNodeId = id;
           state.nodeDragOffset = {
-            x: (e.clientX / state.transform.scale) - pos.x,
-            y: (e.clientY / state.transform.scale) - pos.y
+            x: ((e.clientX - state.transform.x) / state.transform.scale) - pos.x,
+            y: ((e.clientY - state.transform.y) / state.transform.scale) - pos.y
           };
           selectNode(id);
         });
+
+        handle.addEventListener('touchstart', function(e) {
+          e.stopPropagation();
+          if (e.touches.length === 1) {
+            state.draggingNodeId = id;
+            const touch = e.touches[0];
+            state.nodeDragOffset = {
+              x: ((touch.clientX - state.transform.x) / state.transform.scale) - pos.x,
+              y: ((touch.clientY - state.transform.y) / state.transform.scale) - pos.y
+            };
+            selectNode(id);
+          }
+        }, { passive: false });
 
         nodesLayer.appendChild(el);
       });
@@ -805,30 +867,89 @@
       });
 
       const viewport = document.getElementById('viewport');
+
       viewport.addEventListener('mousedown', function(e) {
         if (e.target.closest('.node-tree') || e.target.closest('#side-panel') || e.target.closest('.modal')) return;
         state.isDraggingViewport = true;
         state.dragStart = { x: e.clientX - state.transform.x, y: e.clientY - state.transform.y };
       });
 
+      viewport.addEventListener('touchstart', function(e) {
+        if (e.target.closest('.node-tree') || e.target.closest('#side-panel') || e.target.closest('.modal')) return;
+        
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          state.isDraggingViewport = false;
+          state.draggingNodeId = null;
+          state.initialPinchDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          state.initialScale = state.transform.scale;
+        } else if (e.touches.length === 1) {
+          state.isDraggingViewport = true;
+          const touch = e.touches[0];
+          state.dragStart = { x: touch.clientX - state.transform.x, y: touch.clientY - state.transform.y };
+        }
+      }, { passive: false });
+
       window.addEventListener('mousemove', function(e) {
+        handleMove(e.clientX, e.clientY);
+      });
+
+      window.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 2 && state.initialPinchDist !== null) {
+          e.preventDefault();
+          const currentDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          const scaleFactor = currentDist / state.initialPinchDist;
+          state.transform.scale = Math.min(2, Math.max(0.3, state.initialScale * scaleFactor));
+          updateTransform();
+        } else if (e.touches.length === 1) {
+          handleMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: false });
+
+      function handleMove(clientX, clientY) {
         if (state.draggingNodeId) {
           const node = state.nodes[state.draggingNodeId];
           if (node) {
-            node.customX = (e.clientX / state.transform.scale) - state.nodeDragOffset.x;
-            node.customY = (e.clientY / state.transform.scale) - state.nodeDragOffset.y;
+            node.customX = ((clientX - state.transform.x) / state.transform.scale) - state.nodeDragOffset.x;
+            node.customY = ((clientY - state.transform.y) / state.transform.scale) - state.nodeDragOffset.y;
             render();
           }
         } else if (state.isDraggingViewport) {
-          state.transform.x = e.clientX - state.dragStart.x;
-          state.transform.y = e.clientY - state.dragStart.y;
+          state.transform.x = clientX - state.dragStart.x;
+          state.transform.y = clientY - state.dragStart.y;
           updateTransform();
+        }
+      }
+
+      window.addEventListener('mouseup', endDrag);
+      window.addEventListener('touchend', function(e) {
+        if (e.touches.length < 2) {
+          state.initialPinchDist = null;
+        }
+        if (e.touches.length === 0) {
+          endDrag();
         }
       });
 
-      window.addEventListener('mouseup', function() {
+      function endDrag() {
         state.isDraggingViewport = false;
         state.draggingNodeId = null;
+      }
+
+      document.getElementById('btn-zoom-fit').addEventListener('click', function() {
+        Object.keys(state.nodes).forEach(function(id) {
+          state.nodes[id].customX = undefined;
+          state.nodes[id].customY = undefined;
+        });
+        assignInitialLayout(state.nodes, state.rootId);
+        state.transform = { x: 80, y: 120, scale: 0.85 };
+        render();
       });
 
       document.getElementById('btn-reset-view').addEventListener('click', function() {
@@ -836,6 +957,7 @@
           state.nodes[id].customX = undefined;
           state.nodes[id].customY = undefined;
         });
+        assignInitialLayout(state.nodes, state.rootId);
         state.transform = { x: 80, y: 120, scale: 0.85 };
         render();
       });
@@ -890,6 +1012,7 @@
           customX: undefined, customY: undefined
         }
       };
+      assignInitialLayout(state.nodes, state.rootId);
       render();
 
       if (!state.apiKey) {
